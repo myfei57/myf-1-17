@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Trash2, Edit3, Package, Recycle, CheckSquare, Square, Lock, AlertTriangle } from 'lucide-react';
+import { Search, Filter, Trash2, Edit3, Package, Recycle, CheckSquare, Square, Lock, AlertTriangle, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { PageContainer } from '../components/PageContainer';
 import { PartCard } from '../components/PartCard';
 import { Modal } from '../components/Modal';
@@ -21,6 +21,8 @@ export function InventoryPage() {
   const [selectedPartIds, setSelectedPartIds] = useState<Set<string>>(new Set());
   const [showBatchRecycleConfirm, setShowBatchRecycleConfirm] = useState(false);
   const [showBatchRecycleResult, setShowBatchRecycleResult] = useState<RecycleRecord | null>(null);
+  const [showRecycleRecords, setShowRecycleRecords] = useState(false);
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
   const parts = useGameStore((s) => s.parts);
   const config = useGameStore((s) => s.config);
@@ -29,6 +31,7 @@ export function InventoryPage() {
   const batchRecycle = useGameStore((s) => s.batchRecycle);
   const togglePartLock = useGameStore((s) => s.togglePartLock);
   const materials = useGameStore((s) => s.materials);
+  const recycleRecords = useGameStore((s) => s.recycleRecords);
 
   const filteredParts = useMemo(() => {
     let result = [...parts];
@@ -74,15 +77,20 @@ export function InventoryPage() {
     }
   };
 
-  const handleRecycle = (partId: string) => {
+  const handleRecycleClick = (partId: string) => {
     const part = parts.find((p) => p.id === partId);
     if (!part) return;
 
     if (part.locked) {
-      setShowRecycleConfirm(null);
       setShowLockedRecycleConfirm(partId);
-      return;
+    } else {
+      setShowRecycleConfirm(partId);
     }
+  };
+
+  const handleRecycle = (partId: string) => {
+    const part = parts.find((p) => p.id === partId);
+    if (!part) return;
 
     const rate = config.recyclingRates[part.rarity];
     const gained = Math.floor(part.maxDurability * rate);
@@ -300,17 +308,29 @@ export function InventoryPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border-subtle">
-          {Object.entries(config.rarities).map(([key, value]) => (
-            <div
-              key={key}
-              className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm"
-              style={{ backgroundColor: value.bgColor, color: value.color }}
-            >
-              <span className="font-mono font-bold">{rarityStats[key as Rarity]}</span>
-              <span>{value.name}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-border-subtle">
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(config.rarities).map(([key, value]) => (
+              <div
+                key={key}
+                className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm"
+                style={{ backgroundColor: value.bgColor, color: value.color }}
+              >
+                <span className="font-mono font-bold">{rarityStats[key as Rarity]}</span>
+                <span>{value.name}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowRecycleRecords(true)}
+            className="btn btn-secondary text-sm flex items-center gap-2"
+          >
+            <History className="w-4 h-4" />
+            回收记录
+            <span className="bg-background-tertiary px-2 py-0.5 rounded text-xs font-mono">
+              {recycleRecords.length}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -339,7 +359,7 @@ export function InventoryPage() {
                   part={part}
                   size="lg"
                   onEdit={setEditingPart}
-                  onRecycle={(id) => setShowRecycleConfirm(id)}
+                  onRecycle={handleRecycleClick}
                   onLockToggle={togglePartLock}
                   showLock={true}
                   showSelection={batchSelectMode}
@@ -765,6 +785,129 @@ export function InventoryPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={showRecycleRecords}
+        onClose={() => setShowRecycleRecords(false)}
+        title="回收记录"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {recycleRecords.length === 0 ? (
+            <div className="text-center py-12">
+              <History className="w-12 h-12 mx-auto mb-4 text-white/20" />
+              <p className="text-white/50">暂无回收记录</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+              {[...recycleRecords].reverse().map((record) => (
+                <div
+                  key={record.id}
+                  className="card p-4 border border-border-subtle"
+                >
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() =>
+                      setExpandedRecordId(
+                        expandedRecordId === record.id ? null : record.id
+                      )
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      <Recycle className="w-5 h-5 text-neon-green" />
+                      <div>
+                        <p className="font-bold text-white">
+                          批量拆解 {record.partsCount} 个零件
+                        </p>
+                        <p className="text-xs text-white/40">
+                          {new Date(record.recycledAt).toLocaleString('zh-CN')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="font-mono font-bold text-neon-green text-lg">
+                          +{record.materialsGained}
+                        </p>
+                        <p className="text-xs text-white/40">材料</p>
+                      </div>
+                      {expandedRecordId === record.id ? (
+                        <ChevronUp className="w-5 h-5 text-white/40" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-white/40" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-border-subtle">
+                    <p className="text-xs text-white/50 mb-2">稀有度分布:</p>
+                    <div className="grid grid-cols-5 gap-2 mb-3">
+                      {(Object.entries(record.rarityBreakdown) as [Rarity, number][]).map(
+                        ([rarity, count]) => {
+                          const rConfig = config.rarities[rarity];
+                          return (
+                            <div
+                              key={rarity}
+                              className="p-2 rounded-lg text-center"
+                              style={{ backgroundColor: rConfig.bgColor }}
+                            >
+                              <div
+                                className="text-xs mb-1"
+                                style={{ color: rConfig.color }}
+                              >
+                                {rConfig.name}
+                              </div>
+                              <div className="font-mono font-bold text-white text-sm">
+                                {count}
+                              </div>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+                  </div>
+
+                  <AnimatePresence>
+                    {expandedRecordId === record.id && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="pt-3 border-t border-border-subtle">
+                          <p className="text-xs text-white/50 mb-2">
+                            拆解零件列表 ({record.partNames.length}个):
+                          </p>
+                          <div className="flex flex-wrap gap-2 max-h-[200px] overflow-y-auto">
+                            {record.partNames.map((name, index) => (
+                              <span
+                                key={index}
+                                className="px-2 py-1 bg-background-tertiary rounded text-xs text-white/70"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4 border-t border-border-subtle">
+            <button
+              onClick={() => setShowRecycleRecords(false)}
+              className="btn btn-primary"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
       </Modal>
     </PageContainer>
   );
