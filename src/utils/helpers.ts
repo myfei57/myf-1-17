@@ -84,6 +84,7 @@ export function generateRandomPart(config: GameConfig, minRarity?: Rarity): Part
     maxDurability: Math.floor(baseDurability * multiplier),
     description: template.description,
     icon: type,
+    locked: false,
   };
 }
 

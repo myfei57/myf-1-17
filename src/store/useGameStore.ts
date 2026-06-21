@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type {
+import {
   Store,
   Part,
   PartType,
@@ -8,6 +8,7 @@ import type {
   Robot,
   MissionRecord,
   RepairRecord,
+  RecycleRecord,
   AssemblyPlan,
   GameConfig,
 } from '../types';
@@ -44,6 +45,7 @@ export const useGameStore = create<Store>()(
       materials: INITIAL_MATERIALS,
       missionRecords: [],
       repairRecords: [],
+      recycleRecords: [],
       assemblyPlans: [],
       config: DEFAULT_CONFIG,
       selectedParts: { ...EMPTY_SELECTED_PARTS },
@@ -59,6 +61,13 @@ export const useGameStore = create<Store>()(
         set((state) => ({
           parts: state.parts.map((p) =>
             p.id === partId ? { ...p, ...updates } : p
+          ),
+        })),
+
+      togglePartLock: (partId) =>
+        set((state) => ({
+          parts: state.parts.map((p) =>
+            p.id === partId ? { ...p, locked: !p.locked } : p
           ),
         })),
 
@@ -106,6 +115,9 @@ export const useGameStore = create<Store>()(
       addRepairRecord: (record) =>
         set((state) => ({ repairRecords: [...state.repairRecords, record] })),
 
+      addRecycleRecord: (record) =>
+        set((state) => ({ recycleRecords: [...state.recycleRecords, record] })),
+
       addAssemblyPlan: (plan) =>
         set((state) => ({ assemblyPlans: [...state.assemblyPlans, plan] })),
 
@@ -134,7 +146,7 @@ export const useGameStore = create<Store>()(
       recyclePart: (partId) => {
         const state = get();
         const part = state.parts.find((p) => p.id === partId);
-        if (!part) return;
+        if (!part) return 0;
 
         const recycleRate = state.config.recyclingRates[part.rarity];
         const materialsGained = Math.floor(part.maxDurability * recycleRate);
@@ -143,6 +155,55 @@ export const useGameStore = create<Store>()(
           parts: s.parts.filter((p) => p.id !== partId),
           materials: s.materials + materialsGained,
         }));
+
+        return materialsGained;
+      },
+
+      batchRecycle: (partIds) => {
+        const state = get();
+        const partsToRecycle = state.parts.filter(
+          (p) => partIds.includes(p.id) && !p.locked
+        );
+
+        const rarityBreakdown: Record<Rarity, number> = {
+          common: 0,
+          uncommon: 0,
+          rare: 0,
+          epic: 0,
+          legendary: 0,
+        };
+
+        let totalMaterials = 0;
+        const recycledPartIds: string[] = [];
+        const recycledPartNames: string[] = [];
+
+        for (const part of partsToRecycle) {
+          const rate = state.config.recyclingRates[part.rarity];
+          const gained = Math.floor(part.maxDurability * rate);
+          totalMaterials += gained;
+          rarityBreakdown[part.rarity]++;
+          recycledPartIds.push(part.id);
+          recycledPartNames.push(part.name);
+        }
+
+        set((s) => ({
+          parts: s.parts.filter((p) => !recycledPartIds.includes(p.id)),
+          materials: s.materials + totalMaterials,
+        }));
+
+        const record: RecycleRecord = {
+          id: generateId(),
+          partIds: recycledPartIds,
+          partNames: recycledPartNames,
+          partsCount: recycledPartIds.length,
+          materialsGained: totalMaterials,
+          rarityBreakdown,
+          recycledAt: Date.now(),
+        };
+
+        state.addRecycleRecord(record);
+
+        return record;
       },
 
       repairRobot: (robotId) => {
@@ -294,6 +355,7 @@ export const useGameStore = create<Store>()(
           materials: INITIAL_MATERIALS,
           missionRecords: [],
           repairRecords: [],
+          recycleRecords: [],
           assemblyPlans: [],
           selectedParts: { ...EMPTY_SELECTED_PARTS },
         }),
@@ -307,9 +369,21 @@ export const useGameStore = create<Store>()(
         materials: state.materials,
         missionRecords: state.missionRecords,
         repairRecords: state.repairRecords,
+        recycleRecords: state.recycleRecords,
         assemblyPlans: state.assemblyPlans,
         config: state.config,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.parts) {
+          state.parts = state.parts.map((part) => ({
+            locked: false,
+            ...part,
+          }));
+        }
+        if (state && !state.recycleRecords) {
+          state.recycleRecords = [];
+        }
+      },
     }
   )
 );

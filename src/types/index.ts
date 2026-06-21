@@ -18,6 +18,7 @@ export interface Part {
   maxDurability: number;
   description: string;
   icon: string;
+  locked: boolean;
 }
 
 export interface Robot {
@@ -78,6 +79,16 @@ export interface RepairRecord {
   success: boolean;
   durabilityRestored: number;
   repairedAt: number;
+}
+
+export interface RecycleRecord {
+  id: string;
+  partIds: string[];
+  partNames: string[];
+  partsCount: number;
+  materialsGained: number;
+  rarityBreakdown: Record<Rarity, number>;
+  recycledAt: number;
 }
 
 export interface AssemblyPlan {
@@ -143,6 +154,7 @@ export interface GameState {
   materials: number;
   missionRecords: MissionRecord[];
   repairRecords: RepairRecord[];
+  recycleRecords: RecycleRecord[];
   assemblyPlans: AssemblyPlan[];
   config: GameConfig;
   selectedParts: Record<PartType, Part | null>;
@@ -152,6 +164,7 @@ export interface GameActions {
   addPart: (part: Part) => void;
   removePart: (partId: string) => void;
   updatePart: (partId: string, updates: Partial<Part>) => void;
+  togglePartLock: (partId: string) => void;
   addRobot: (robot: Robot) => void;
   removeRobot: (robotId: string) => void;
   updateRobot: (robotId: string, updates: Partial<Robot>) => void;
@@ -161,13 +174,15 @@ export interface GameActions {
   spendMaterials: (amount: number) => boolean;
   addMissionRecord: (record: MissionRecord) => void;
   addRepairRecord: (record: RepairRecord) => void;
+  addRecycleRecord: (record: RecycleRecord) => void;
   addAssemblyPlan: (plan: AssemblyPlan) => void;
   removeAssemblyPlan: (planId: string) => void;
   updateConfig: (config: Partial<GameConfig>) => void;
   resetConfig: () => void;
   setSelectedPart: (slot: PartType, part: Part | null) => void;
   clearSelectedParts: () => void;
-  recyclePart: (partId: string) => void;
+  recyclePart: (partId: string) => number;
+  batchRecycle: (partIds: string[]) => RecycleRecord;
   repairRobot: (robotId: string) => { success: boolean; cost: number; restored: number };
   executeMission: (robotId: string, missionId: string) => MissionRecord;
   calculateRobotStats: (parts: Record<PartType, Part | null>) => {

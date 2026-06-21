@@ -10,6 +10,9 @@ import {
   Gauge,
   Layers,
   Heart,
+  Lock,
+  Unlock,
+  Check,
 } from 'lucide-react';
 import type { Part, PartType } from '../types';
 import { useGameStore } from '../store/useGameStore';
@@ -29,9 +32,13 @@ interface PartCardProps {
   part: Part;
   onEdit?: (part: Part) => void;
   onRecycle?: (partId: string) => void;
+  onLockToggle?: (partId: string) => void;
   onClick?: () => void;
   selectable?: boolean;
   selected?: boolean;
+  onSelect?: (partId: string) => void;
+  showSelection?: boolean;
+  showLock?: boolean;
   draggable?: boolean;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   showStats?: boolean;
@@ -42,9 +49,13 @@ export function PartCard({
   part,
   onEdit,
   onRecycle,
+  onLockToggle,
   onClick,
   selectable = false,
   selected = false,
+  onSelect,
+  showSelection = false,
+  showLock = false,
   size = 'md',
   showStats = true,
   showName = true,
@@ -76,20 +87,67 @@ export function PartCard({
     lg: 'text-lg',
   };
 
+  const handleSelectClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (part.locked) return;
+    if (onSelect) {
+      onSelect(part.id);
+    }
+  };
+
+  const handleLockClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onLockToggle) {
+      onLockToggle(part.id);
+    }
+  };
+
+  const handleCardClick = () => {
+    if (showSelection && !part.locked && onSelect) {
+      onSelect(part.id);
+    } else if (onClick) {
+      onClick();
+    }
+  };
+
   return (
     <motion.div
-      whileHover={{ scale: selectable || onClick ? 1.02 : 1 }}
-      whileTap={selectable || onClick ? { scale: 0.98 } : undefined}
-      onClick={onClick}
+      whileHover={{ scale: (selectable || onClick || (showSelection && !part.locked)) ? 1.02 : 1 }}
+      whileTap={(selectable || onClick || (showSelection && !part.locked)) ? { scale: 0.98 } : undefined}
+      onClick={handleCardClick}
       className={`card border-2 ${rarityBorder} ${sizeClasses[size]} cursor-${
-        selectable || onClick ? 'pointer' : 'default'
+        selectable || onClick || (showSelection && !part.locked) ? 'pointer' : 'default'
       } transition-all duration-200 ${
         selected ? 'ring-2 ring-neon-blue shadow-neon-blue' : ''
-      }`}
+      } ${part.locked ? 'opacity-75' : ''} relative overflow-hidden`}
       style={{
         background: `linear-gradient(135deg, ${rarityConfig.bgColor}, rgba(30, 41, 59, 0.9))`,
       }}
     >
+      {part.locked && (
+        <div className="absolute top-2 right-2 z-10">
+          <div className="bg-neon-yellow/20 text-neon-yellow p-1 rounded-full">
+            <Lock className="w-4 h-4" />
+          </div>
+        </div>
+      )}
+
+      {showSelection && (
+        <div
+          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+            part.locked
+              ? 'border-white/20 bg-white/5 cursor-not-allowed'
+              : selected
+              ? 'border-neon-blue bg-neon-blue'
+              : 'border-white/40 bg-background-tertiary hover:border-neon-blue'
+          }`}
+          onClick={handleSelectClick}
+        >
+          {selected && !part.locked && <Check className="w-3 h-3 text-white" />}
+          {part.locked && <Lock className="w-3 h-3 text-white/30" />}
+        </div>
+      )}
+
       <div className="flex items-start gap-3">
         <div
           className={`${iconSizes[size]} flex-shrink-0 p-2 rounded-lg bg-background-tertiary`}
@@ -164,6 +222,26 @@ export function PartCard({
 
           {size === 'lg' && (
             <div className="mt-2 flex gap-2">
+              {showLock && onLockToggle && (
+                <button
+                  onClick={handleLockClick}
+                  className={`btn text-xs px-3 py-1 flex-1 ${
+                    part.locked ? 'btn-warning' : 'btn-secondary'
+                  }`}
+                >
+                  {part.locked ? (
+                    <>
+                      <Unlock className="w-3 h-3 mr-1" />
+                      解锁
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3 h-3 mr-1" />
+                      锁定
+                    </>
+                  )}
+                </button>
+              )}
               {onEdit && (
                 <button
                   onClick={(e) => {
@@ -181,7 +259,9 @@ export function PartCard({
                     e.stopPropagation();
                     onRecycle(part.id);
                   }}
-                  className="btn btn-warning text-xs px-3 py-1 flex-1"
+                  className={`btn text-xs px-3 py-1 flex-1 ${
+                    part.locked ? 'btn-disabled opacity-50' : 'btn-warning'
+                  }`}
                 >
                   拆解
                 </button>
